@@ -1,13 +1,9 @@
 package magiskboot
 
-import "os"
+func align_to(v uint64, a uint64) uint64 {
+	return (v + a - 1) / a * a
+}
 
-func checkenv(key string) bool {
-	value, ret := os.LookupEnv(key)
-	if ret {
-		if value == "true" {
-			return true
-		}
-	}
-	return false
+func align_padding(v, a uint64) uint64 {
+	return align_to(v, a) - v
 }

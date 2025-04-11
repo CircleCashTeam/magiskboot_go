@@ -70,7 +70,7 @@ const (
 	ZIMAGE_MAGIC             = "\x18\x28\x6f\x01"
 )
 
-func check_fmt(buf []byte) format_t {
+func CheckFmt(buf []byte) format_t {
 	CHECKED_MATCH := func(p string) bool {
 		return bytes.Equal([]byte(p), buf[:len(p)])
 	}

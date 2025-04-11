@@ -37,7 +37,7 @@ func TestRemovePatterns(t *testing.T) {
 	tdata := []byte(`
 # 123456
 aa      aaaa          aaaaa
-bb      bbbb          bbbbb  misc,forceencrypt=footer,whatever,blabla
+bb      bbbb          bbbbb  misc,forceencrypt=footer,whatever,blabla,fileencryption
 `)
 
 	except := []byte(`
@@ -52,7 +52,7 @@ bb      bbbb          bbbbb  misc,whatever,blabla
 	}
 
 	if !bytes.Equal(newdata, except) {
-		t.Fatalf("\nOrigin: %s\nExcept: %s\nBut: %s", tdata, except, newdata)
+		t.Fatalf("\nOrigin: %v\nExcept: %v\nBut: %v", tdata, except, newdata)
 	}
 
 }

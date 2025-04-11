@@ -14,10 +14,8 @@ func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\n' || b == '\t' || b == '\r'
 }
 
-func removePatterns(data []byte, patterns [][]byte) ([]byte, int) {
+func removePatterns(data []byte, patterns [][]byte) []byte {
 	var result []byte
-	originalLen := len(data)
-	removed := 0
 
 	for i := 0; i < len(data); {
 		matched := false
@@ -33,7 +31,6 @@ func removePatterns(data []byte, patterns [][]byte) ([]byte, int) {
 					}
 					end++
 				}
-				removed += end - i
 				i = end
 				matched = true
 				break
@@ -46,7 +43,11 @@ func removePatterns(data []byte, patterns [][]byte) ([]byte, int) {
 		}
 	}
 
-	return result, originalLen - removed
+	result = bytes.ReplaceAll(result, []byte(", "), []byte(" "))
+	result = bytes.ReplaceAll(result, []byte(",\n"), []byte("\n"))
+	result = bytes.ReplaceAll(result, []byte(",,"), []byte(","))
+
+	return result
 }
 
 func PatchVerify(data []byte) []byte {
@@ -58,8 +59,8 @@ func PatchVerify(data []byte) []byte {
 		[]byte("support_scfs"),
 		[]byte("fsverity"),
 	}
-	newdata, _ := removePatterns(data, patterns)
-	return newdata
+	return removePatterns(data, patterns)
+
 }
 
 func PatchEncryption(data []byte) []byte {
@@ -68,8 +69,7 @@ func PatchEncryption(data []byte) []byte {
 		[]byte("forcefdeorfbe"),
 		[]byte("fileencryption"),
 	}
-	newdata, _ := removePatterns(data, patterns)
-	return newdata
+	return removePatterns(data, patterns)
 }
 
 func HexPatch(file, from, to string) bool {

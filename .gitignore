@@ -2,3 +2,5 @@ magisk/*
 
 *.bin
 *.exe
+
+*.cpio
