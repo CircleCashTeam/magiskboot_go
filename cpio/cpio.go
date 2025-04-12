@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"magiskboot/stub"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,7 +18,6 @@ import (
 	"slices"
 
 	"github.com/edsrzf/mmap-go"
-	"golang.org/x/sys/unix"
 )
 
 // Define this to avoid missing in different platform
@@ -407,8 +408,12 @@ func (c *Cpio) extractEntry(p, out string) error {
 		lnk := string(bytes.ReplaceAll(entry.Data, []byte{0}, []byte{}))
 		return os.Symlink(lnk, out)
 	case S_IFBLK | S_IFCHR:
-		dev := unix.Mkdev(entry.RDevMajor, entry.RDevMinor)
-		return unix.Mknod(out, uint32(mode), int(dev))
+		if runtime.GOOS != "windows" {
+			dev := stub.Mkdev(entry.RDevMajor, entry.RDevMinor)
+			return stub.Mknod(out, uint32(mode), int(dev))
+		} else {
+			return nil
+		}
 	default:
 		return errors.New("unknow entry type")
 	}
@@ -466,20 +471,22 @@ func (c *Cpio) Add(mode uint32, path string, file string) error {
 			}
 			return mode | S_IFREG
 		} else {
-			uattr := unix.Stat_t{}
-			err = unix.Stat(file, &uattr)
-			//uattr := &attr
-			if err != nil {
-				log.Fatalln(err)
-			}
-			rdevmajor = uint64(unix.Major(uattr.Rdev))
-			rdevminor = uint64(unix.Minor(uattr.Rdev))
-			if attr.Mode()&os.ModeDevice != 0 {
-				mode = mode | S_IFBLK
-			} else if attr.Mode()&os.ModeCharDevice != 0 {
-				mode = mode | S_IFCHR
-			} else {
-				log.Fatalln("unsupport file type")
+			if runtime.GOOS != "windows" {
+				uattr := stub.Stat_t{}
+				err = stub.Stat(file, &uattr)
+				//uattr := &attr
+				if err != nil {
+					log.Fatalln(err)
+				}
+				rdevmajor = uint64(stub.Major(uint64(uattr.Rdev)))
+				rdevminor = uint64(stub.Minor(uint64(uattr.Rdev)))
+				if attr.Mode()&os.ModeDevice != 0 {
+					mode = mode | S_IFBLK
+				} else if attr.Mode()&os.ModeCharDevice != 0 {
+					mode = mode | S_IFCHR
+				} else {
+					log.Fatalln("unsupport file type")
+				}
 			}
 		}
 		return mode
