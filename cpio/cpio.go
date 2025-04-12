@@ -17,6 +17,7 @@ import (
 
 	"slices"
 
+	"github.com/dustin/go-humanize"
 	"github.com/edsrzf/mmap-go"
 )
 
@@ -33,6 +34,23 @@ const (
 	S_IFLNK   = 0120000
 	S_IFMT    = 0170000
 	S_IFREG   = 0100000
+)
+
+const (
+	// 用户权限
+	S_IRUSR = 0400 // 用户可读
+	S_IWUSR = 0200 // 用户可写
+	S_IXUSR = 0100 // 用户可执行
+
+	// 组权限
+	S_IRGRP = 0040 // 组可读
+	S_IWGRP = 0020 // 组可写
+	S_IXGRP = 0010 // 组可执行
+
+	// 其他用户权限
+	S_IROTH = 0004 // 其他用户可读
+	S_IWOTH = 0002 // 其他用户可写
+	S_IXOTH = 0001 // 其他用户可执行
 )
 
 type CpioCli struct {
@@ -532,4 +550,97 @@ func (c *Cpio) Ln(src, dst string) {
 		}(),
 	})
 	fmt.Fprintf(os.Stderr, "Create symlink [%s] -> [%s]\n", dst, src)
+}
+
+func (c *Cpio) Ls(path string, recursive bool) {
+	path = norm_path(path)
+	if path != "" {
+		path = "/" + path
+	}
+
+	for _, name := range c.Keys {
+		entry := c.Entries[name]
+		p := "/" + name
+		if !strings.HasPrefix(p, path) {
+			continue
+		}
+		p = strings.TrimPrefix(p, path)
+		if p != "" && !strings.HasPrefix(p, "/") {
+			continue
+		}
+		if !recursive && p != "" && strings.Count(p, "/") > 1 {
+			continue
+		}
+		//fmt.Printf("%s\n", name)
+		fmt.Fprintf(os.Stdout, "%v\t%s\n", entry, name)
+	}
+}
+
+// Make cpio.ls print formatable
+//
+// Example:
+//
+//	fmt.Printf("%v\n", e)
+func (entry CpioEntry) Format(f fmt.State, verb rune) {
+	io.WriteString(f, fmt.Sprintf("%8s%8d%8d%8s%4d:%-8d",
+		func() string {
+			var a, b, c, d, e, f, g, h, i, j byte
+			switch entry.Mode & S_IFMT {
+			case S_IFDIR:
+				a = 'd'
+			case S_IFREG:
+				a = '-'
+			case S_IFLNK:
+				a = 'l'
+			case S_IFBLK:
+				a = 'b'
+			case S_IFCHR:
+				a = 'c'
+			default:
+				a = '?'
+			}
+			b = '-'
+			if entry.Mode&S_IRUSR != 0 {
+				b = 'r'
+			}
+			c = '-'
+			if entry.Mode&S_IWUSR != 0 {
+				c = 'w'
+			}
+			d = '-'
+			if entry.Mode&S_IXUSR != 0 {
+				d = 'x'
+			}
+			e = '-'
+			if entry.Mode&S_IRGRP != 0 {
+				e = 'r'
+			}
+			f = '-'
+			if entry.Mode&S_IWGRP != 0 {
+				f = 'w'
+			}
+			g = '-'
+			if entry.Mode&S_IXGRP != 0 {
+				g = 'x'
+			}
+			h = '-'
+			if entry.Mode&S_IROTH != 0 {
+				h = 'r'
+			}
+			i = '-'
+			if entry.Mode&S_IWOTH != 0 {
+				i = 'w'
+			}
+			j = '-'
+			if entry.Mode&S_IXOTH != 0 {
+				j = 'x'
+			}
+			return fmt.Sprintf("%c%c%c%c%c%c%c%c%c%c", a, b, c, d, e, f, g, h, i, j)
+		}(),
+		entry.Uid,
+		entry.Gid,
+		humanize.Bytes(uint64(len(entry.Data))),
+		entry.RDevMajor,
+		entry.RDevMinor,
+	))
 }
