@@ -1,7 +1,6 @@
 package magiskboot_test
 
 import (
-	"fmt"
 	cpio "magiskboot/cpio"
 	"os"
 	"testing"
@@ -43,20 +42,27 @@ func TestRamdisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cpio.Close()
+	cpio.Close()
+	//cpio.Mkdir(0755, "test")
+	//err = cpio.Add(0755, "test/README.md", "README.md")
+	//if err != nil {
+	//	t.Fatal("Failed to add file", err)
+	//}
 
-	err = cpio.Add(0755, "test/README.md", "README.md")
+	//for _, k := range cpio.Keys {
+	//	fmt.Fprintf(os.Stderr, "Entry: %s\n", k)
+	//}
+
+	//cpio.Ls("system", true)
+	//os.Setenv("KEEPVERITY", "true")
+	cpio.Patch()
+	//cpio.Ln("/foo/bar", "test/testlnk")
+	//target := "test/testlnk"
+	//cpio.Extract(&target, &target)
+	//cpio.Dump("ramdisk_test.cpio")
+	err = cpio.Dump("ramdisk.cpio")
 	if err != nil {
-		t.Fatal("Failed to add file", err)
+		t.Fatal(err)
 	}
-
-	for _, k := range cpio.Keys {
-		fmt.Fprintf(os.Stderr, "Entry: %s\n", k)
-	}
-
-	cpio.Ln("/foo/bar", "test/testlnk")
-	target := "test/testlnk"
-	cpio.Extract(&target, &target)
-	cpio.Dump("ramdisk_test.cpio")
 
 }

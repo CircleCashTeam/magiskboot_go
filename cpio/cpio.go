@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"magiskboot"
 	"magiskboot/stub"
 	"os"
 	"path"
@@ -168,7 +169,7 @@ type CpioHeader struct {
 }
 
 type Cpio struct {
-	Entries map[string]*CpioEntry
+	Entries map[string]CpioEntry
 	Keys    []string
 
 	fd *os.File
@@ -186,7 +187,7 @@ type CpioEntry struct {
 
 func NewCpio() *Cpio {
 	return &Cpio{
-		Entries: make(map[string]*CpioEntry),
+		Entries: make(map[string]CpioEntry),
 		Keys:    make([]string, 0),
 	}
 }
@@ -250,13 +251,13 @@ func (c *Cpio) LoadFromData(data []byte) error {
 			u, _ := x8u(x[:])
 			return u
 		}
-		c.Entries[name] = &CpioEntry{
+		c.Entries[name] = CpioEntry{
 			Mode:      xx8u(hdr.Mode),
 			Uid:       xx8u(hdr.Uid),
 			Gid:       xx8u(hdr.Gid),
 			RDevMajor: xx8u(hdr.Rdevmajor),
 			RDevMinor: xx8u(hdr.Rdevminor),
-			Data:      data[pos : pos+uint64(file_sz)],
+			Data:      bytes.Clone(data[pos : pos+uint64(file_sz)]),
 		}
 		c.Keys = append(c.Keys, name)
 		pos += uint64(file_sz)
@@ -290,7 +291,8 @@ func (c *Cpio) LoadFromFile(path string) error {
 }
 
 func (c *Cpio) Close() {
-	c.mm.Flush()
+	// This may cause c.Dump failed
+	//c.mm.Flush() // Do not flush memories
 	c.mm.Unmap()
 	c.fd.Close()
 }
@@ -459,7 +461,7 @@ func (c *Cpio) Exists(path string) bool {
 	return slices.Contains(c.Keys, path)
 }
 
-func (c *Cpio) addEntry(key string, entry *CpioEntry) {
+func (c *Cpio) addEntry(key string, entry CpioEntry) {
 	c.Entries[key] = entry
 	c.Keys = append(c.Keys, key)
 	// Sort c.Keys like rust BTreeMap
@@ -510,7 +512,7 @@ func (c *Cpio) Add(mode uint32, path string, file string) error {
 		return mode
 	}()
 
-	c.addEntry(norm_path(path), &CpioEntry{
+	c.addEntry(norm_path(path), CpioEntry{
 		Mode:      mode,
 		Uid:       0,
 		Gid:       0,
@@ -523,7 +525,7 @@ func (c *Cpio) Add(mode uint32, path string, file string) error {
 }
 
 func (c *Cpio) Mkdir(mode uint32, dir string) {
-	c.addEntry(norm_path(dir), &CpioEntry{
+	c.addEntry(norm_path(dir), CpioEntry{
 		Mode:      mode | S_IFDIR,
 		Uid:       0,
 		Gid:       0,
@@ -535,7 +537,7 @@ func (c *Cpio) Mkdir(mode uint32, dir string) {
 }
 
 func (c *Cpio) Ln(src, dst string) {
-	c.addEntry(norm_path(dst), &CpioEntry{
+	c.addEntry(norm_path(dst), CpioEntry{
 		Mode:      S_IFLNK,
 		Uid:       0,
 		Gid:       0,
@@ -643,4 +645,67 @@ func (entry CpioEntry) Format(f fmt.State, verb rune) {
 		entry.RDevMajor,
 		entry.RDevMinor,
 	))
+}
+
+const MAGISK_PATCHED int32 = 1 << 0
+const UNSUPPORTED_CPIO int32 = 1 << 1
+
+func (c *Cpio) Patch() {
+	keep_verity := magiskboot.CheckEnv("KEEPVERITY")
+	keep_force_encrypt := magiskboot.CheckEnv("KEEPFORCEENCRYPT")
+	fmt.Fprintf(os.Stderr, "Patch with flag KEEPVERITY=[%v] KEEPFORCEENCRYPT=[%v]\n",
+		keep_verity, keep_force_encrypt,
+	)
+	for _, name := range c.Keys {
+		entry := c.Entries[name]
+		fstab := func() bool {
+			return (!keep_verity || !keep_force_encrypt) &&
+				entry.Mode&S_IFMT == S_IFREG &&
+				!strings.HasPrefix(name, ".backup") &&
+				!strings.HasPrefix(name, "twrp") &&
+				!strings.HasPrefix(name, "recovery") &&
+				strings.HasPrefix(name, "fstab")
+		}()
+		if !keep_verity {
+			if fstab {
+				fmt.Fprintf(os.Stderr, "Found fstab file [%s]\n", name)
+				entry.Data = magiskboot.PatchVerity(entry.Data)
+			} else if name == "verity_key" {
+				c.Rm(name, false)
+			}
+		}
+		if !keep_force_encrypt && fstab {
+			entry.Data = magiskboot.PatchEncryption(entry.Data)
+		}
+	}
+}
+
+func (c *Cpio) Test() int32 {
+	for _, file := range []string{
+		"sbin/launch_daemonsu.sh",
+		"sbin/su",
+		"init.xposed.rc",
+		"boot/sbin/launch_daemonsu.sh",
+	} {
+		if slices.Contains(c.Keys, file) {
+			return UNSUPPORTED_CPIO
+		}
+	}
+	for _, file := range []string{
+		".backup/.magisk",
+		"init.magisk.rc",
+		"overlay/init.magisk.rc",
+	} {
+		if slices.Contains(c.Keys, file) {
+			return MAGISK_PATCHED
+		}
+	}
+	return 0
+}
+
+func (c *Cpio) Restore() error {
+	//backups := make(map[string]CpioEntry, 0)
+	//backups_key := make([]string, 0)
+	//rm_list := ""
+	return nil
 }

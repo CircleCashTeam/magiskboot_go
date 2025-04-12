@@ -10,48 +10,9 @@ import (
 	"github.com/edsrzf/mmap-go"
 )
 
-func isWhitespace(b byte) bool {
-	return b == ' ' || b == '\n' || b == '\t' || b == '\r'
-}
-
-func removePatterns(data []byte, patterns [][]byte) []byte {
-	var result []byte
-
-	for i := 0; i < len(data); {
-		matched := false
-
-		for _, pat := range patterns {
-			if bytes.HasPrefix(data[i:], pat) {
-				fmt.Fprintf(os.Stderr, "Remove pattern [%s]\n", pat)
-				end := i + len(pat)
-				for end < len(data) && !isWhitespace(data[end]) {
-					if data[end] == ',' {
-						end++
-						break
-					}
-					end++
-				}
-				i = end
-				matched = true
-				break
-			}
-		}
-
-		if !matched {
-			result = append(result, data[i])
-			i++
-		}
-	}
-
-	result = bytes.ReplaceAll(result, []byte(", "), []byte(" "))
-	result = bytes.ReplaceAll(result, []byte(",\n"), []byte("\n"))
-	result = bytes.ReplaceAll(result, []byte(",,"), []byte(","))
-
-	return result
-}
-
-func PatchVerify(data []byte) []byte {
-	patterns := [][]byte{
+// 定义要移除的模式
+var (
+	verityPatterns = [][]byte{
 		[]byte("verifyatboot"),
 		[]byte("verify"),
 		[]byte("avb_keys"),
@@ -59,17 +20,76 @@ func PatchVerify(data []byte) []byte {
 		[]byte("support_scfs"),
 		[]byte("fsverity"),
 	}
-	return removePatterns(data, patterns)
 
-}
-
-func PatchEncryption(data []byte) []byte {
-	patterns := [][]byte{
+	encryptionPatterns = [][]byte{
 		[]byte("forceencrypt"),
 		[]byte("forcefdeorfbe"),
 		[]byte("fileencryption"),
 	}
-	return removePatterns(data, patterns)
+)
+
+// PatchVerity 移除 verity 相关标记
+func PatchVerity(fstabContent []byte) []byte {
+	return patchFstab(fstabContent, verityPatterns)
+}
+
+// PatchEncryption 移除 encryption 相关标记
+func PatchEncryption(fstabContent []byte) []byte {
+	return patchFstab(fstabContent, encryptionPatterns)
+}
+
+// patchFstab 核心处理函数
+func patchFstab(fstabContent []byte, patterns [][]byte) []byte {
+	lines := bytes.Split(fstabContent, []byte{'\n'})
+	var result [][]byte
+
+	for _, line := range lines {
+		if len(line) == 0 || line[0] == '#' {
+			result = append(result, line)
+			continue
+		}
+
+		// 分割每一行的字段
+		fields := bytes.Fields(line)
+		if len(fields) < 4 {
+			result = append(result, line)
+			continue
+		}
+
+		// 处理 fs_mgr_flags (第4个字段)
+		flags := bytes.Split(fields[4], []byte{','})
+		var newFlags [][]byte
+
+		for _, flag := range flags {
+			shouldRemove := false
+			for _, pattern := range patterns {
+				if bytes.HasPrefix(flag, pattern) {
+					fmt.Printf("Remove pattern [%s]\n", flag)
+					shouldRemove = true
+					break
+				}
+			}
+			if !shouldRemove {
+				newFlags = append(newFlags, flag)
+			}
+		}
+
+		// 重建行
+		newLine := bytes.Join([][]byte{
+			bytes.Join(fields[:4], []byte{' '}),
+			bytes.Join(newFlags, []byte{','}),
+		}, []byte{' '})
+
+		// 如果有第5个字段，追加到行尾
+		if len(fields) > 5 {
+			newLine = append(newLine, ' ')
+			newLine = append(newLine, bytes.Join(fields[5:], []byte{' '})...)
+		}
+
+		result = append(result, newLine)
+	}
+
+	return bytes.Join(result, []byte{'\n'})
 }
 
 func HexPatch(file, from, to string) bool {

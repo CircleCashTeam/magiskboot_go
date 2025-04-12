@@ -1,4 +1,5 @@
-magisk/*
+magisk/
+test/
 
 *.bin
 *.exe
