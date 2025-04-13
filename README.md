@@ -5,7 +5,7 @@ This is magiskboot reimpl by golang
 |Function|Avaliable|
 |---------|--------|
 |Hexpatch | true   |
-
+|Cpio     | true   |
 # Build
 ## We use tinygo to build our new magiskboot
 ### Why
