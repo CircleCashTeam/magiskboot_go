@@ -7,6 +7,6 @@ This is magiskboot reimpl by golang
 |Hexpatch | true   |
 |Cpio     | true   |
 # Build
-## We use tinygo to build our new magiskboot
-### Why
-Because we need to use `//go:packed` to align structure
+```bash
+go build -o magiskboot cmd/magiskboot.go
+```
