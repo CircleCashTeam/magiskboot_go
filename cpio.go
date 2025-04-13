@@ -1,4 +1,4 @@
-package cpio
+package magiskboot
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"magiskboot"
 	"magiskboot/stub"
 	"os"
 	"path"
@@ -721,8 +720,8 @@ const MAGISK_PATCHED int32 = 1 << 0
 const UNSUPPORTED_CPIO int32 = 1 << 1
 
 func (c *Cpio) Patch() {
-	keep_verity := magiskboot.CheckEnv("KEEPVERITY")
-	keep_force_encrypt := magiskboot.CheckEnv("KEEPFORCEENCRYPT")
+	keep_verity := CheckEnv("KEEPVERITY")
+	keep_force_encrypt := CheckEnv("KEEPFORCEENCRYPT")
 	fmt.Fprintf(os.Stderr, "Patch with flag KEEPVERITY=[%v] KEEPFORCEENCRYPT=[%v]\n",
 		keep_verity, keep_force_encrypt,
 	)
@@ -739,13 +738,13 @@ func (c *Cpio) Patch() {
 		if !keep_verity {
 			if fstab {
 				fmt.Fprintf(os.Stderr, "Found fstab file [%s]\n", name)
-				entry.Data = magiskboot.PatchVerity(entry.Data)
+				entry.Data = PatchVerity(entry.Data)
 			} else if name == "verity_key" {
 				c.Rm(name, false)
 			}
 		}
 		if !keep_force_encrypt && fstab {
-			entry.Data = magiskboot.PatchEncryption(entry.Data)
+			entry.Data = PatchEncryption(entry.Data)
 		}
 	}
 }

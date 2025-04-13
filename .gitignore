@@ -5,3 +5,7 @@ test/
 *.exe
 
 *.cpio
+*.orig
+
+main
+magiskboot

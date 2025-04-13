@@ -721,15 +721,15 @@ type BootImg struct {
 	AvbFooter *AvbFooter
 	Vbmeta    *AvbVBMetaImageHeader
 
-	Kernel             *mmap.MMap
-	Ramdisk            *mmap.MMap
-	Second             *mmap.MMap
-	Extra              *mmap.MMap
-	RecoveryDtbo       *mmap.MMap
-	Dtb                *mmap.MMap
-	Signature          *mmap.MMap
-	VendorRamdiskTable *mmap.MMap
-	Bootconfig         *mmap.MMap
+	Kernel             *[]byte
+	Ramdisk            *[]byte
+	Second             *[]byte
+	Extra              *[]byte
+	RecoveryDtbo       *[]byte
+	Dtb                *[]byte
+	Signature          *[]byte
+	VendorRamdiskTable *[]byte
+	Bootconfig         *[]byte
 
 	KernelDtb []byte
 
