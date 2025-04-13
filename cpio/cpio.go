@@ -1,4 +1,4 @@
-package magiskboot
+package cpio
 
 import (
 	"bytes"
