@@ -1042,15 +1042,16 @@ func CpioCommands(argv []string) {
 			}
 		case "ls":
 			if len(cmd) == 1 {
-				cpio.Ls("/", true)
+				cpio.Ls("/", false)
 			} else if len(cmd) == 2 {
 				path := cmd[1]
 				cpio.Ls(path, false)
 			} else if len(cmd) > 2 {
 				recursive := false
-				path := cmd[2]
+				path := cmd[1]
 				if cmd[1] == "-r" {
 					recursive = true
+					path = cmd[2]
 				}
 				cpio.Ls(path, recursive)
 			} else {
