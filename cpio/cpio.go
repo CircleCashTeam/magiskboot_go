@@ -938,12 +938,10 @@ func CpioCommands(argv []string) {
 		log.Fatalln("No arguments")
 	}
 
-	// 初始化
 	cli := NewCpioCli()
 	cli.FromArgs(argv)
 	cpio := NewCpio()
 
-	// 加载现有cpio文件(修正后的逻辑)
 	if _, err := os.Stat(cli.File); err == nil {
 		if err := cpio.LoadFromFile(cli.File); err != nil {
 			log.Fatalf("加载cpio文件失败: %v", err)
@@ -955,15 +953,11 @@ func CpioCommands(argv []string) {
 		os.Exit(125)
 	}
 
-	// 打印调试信息
-	log.Printf("将执行 %d 个命令", len(cli.Commonds))
-
 	for _, command := range cli.Commonds {
 		if strings.HasPrefix(command, "#") {
 			continue
 		}
 		cmd := strings.Split(command, " ")
-		fmt.Printf("cmd: %v\n", cmd)
 		switch cmd[0] {
 		case "test":
 			os.Exit(int(cpio.Test()))
