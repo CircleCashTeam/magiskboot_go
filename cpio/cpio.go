@@ -935,6 +935,7 @@ func parseMode(mode string) uint32 {
 
 func CpioCommands(argv []string) {
 	if len(argv) < 1 {
+		PrintCpioUsage()
 		log.Fatalln("No arguments")
 	}
 
@@ -944,7 +945,7 @@ func CpioCommands(argv []string) {
 
 	if _, err := os.Stat(cli.File); err == nil {
 		if err := cpio.LoadFromFile(cli.File); err != nil {
-			log.Fatalf("加载cpio文件失败: %v", err)
+			log.Fatalf("Load cpio failed: %v", err)
 		}
 	}
 
