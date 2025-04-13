@@ -7,3 +7,5 @@ require (
 	github.com/edsrzf/mmap-go v1.2.0
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
 )
+
+require github.com/ulikunitz/xz v0.5.12

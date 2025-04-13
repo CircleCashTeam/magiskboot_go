@@ -34,35 +34,9 @@ func TestCpio(t *testing.T) {
 }
 
 func TestRamdisk(t *testing.T) {
-	t.Log("Test extracted ramdisk from fajita (OP6T)")
-
-	cpio := cpio.NewCpio()
-
-	err := cpio.LoadFromFile("ramdisk.cpio")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cpio.Close()
-	//cpio.Mkdir(0755, "test")
-	//err = cpio.Add(0755, "test/README.md", "README.md")
-	//if err != nil {
-	//	t.Fatal("Failed to add file", err)
-	//}
-
-	//for _, k := range cpio.Keys {
-	//	fmt.Fprintf(os.Stderr, "Entry: %s\n", k)
-	//}
-
-	//cpio.Ls("system", true)
-	//os.Setenv("KEEPVERITY", "true")
-	cpio.Patch()
-	//cpio.Ln("/foo/bar", "test/testlnk")
-	//target := "test/testlnk"
-	//cpio.Extract(&target, &target)
-	//cpio.Dump("ramdisk_test.cpio")
-	err = cpio.Dump("ramdisk.cpio")
-	if err != nil {
-		t.Fatal(err)
-	}
+	cpio.CpioCommands([]string{
+		"ramdisk.cpio",
+		"ls",
+	})
 
 }

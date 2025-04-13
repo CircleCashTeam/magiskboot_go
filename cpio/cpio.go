@@ -2,6 +2,7 @@ package magiskboot
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/edsrzf/mmap-go"
+	"github.com/ulikunitz/xz"
 )
 
 // Define this to avoid missing in different platform
@@ -38,20 +40,17 @@ const (
 )
 
 const (
-	// 用户权限
-	S_IRUSR = 0400 // 用户可读
-	S_IWUSR = 0200 // 用户可写
-	S_IXUSR = 0100 // 用户可执行
+	S_IRUSR = 0400
+	S_IWUSR = 0200
+	S_IXUSR = 0100
 
-	// 组权限
-	S_IRGRP = 0040 // 组可读
-	S_IWGRP = 0020 // 组可写
-	S_IXGRP = 0010 // 组可执行
+	S_IRGRP = 0040
+	S_IWGRP = 0020
+	S_IXGRP = 0010
 
-	// 其他用户权限
-	S_IROTH = 0004 // 其他用户可读
-	S_IWOTH = 0002 // 其他用户可写
-	S_IXOTH = 0001 // 其他用户可执行
+	S_IROTH = 0004
+	S_IWOTH = 0002
+	S_IXOTH = 0001
 )
 
 type CpioCli struct {
@@ -283,10 +282,8 @@ func (c *Cpio) LoadFromFile(path string) error {
 	// Do not forget to close all these
 	c.LoadFromData(m)
 
-	// At Close()
-	//defer m.Flush()
-	//defer m.Unmap()
-	//defer fd.Close()
+	// When reading done, close
+	c.Close()
 	return nil
 }
 
@@ -554,6 +551,23 @@ func (c *Cpio) Ln(src, dst string) {
 	fmt.Fprintf(os.Stderr, "Create symlink [%s] -> [%s]\n", dst, src)
 }
 
+func (c *Cpio) Mv(from, to string) error {
+	from = norm_path(from)
+	to = norm_path(to)
+	entry := c.Entries[from]
+	newk := make([]string, 0)
+	for _, k := range c.Keys {
+		if k != from {
+			newk = append(newk, k)
+		}
+	}
+	delete(c.Entries, from)
+	c.Keys = newk
+	c.addEntry(to, entry)
+	fmt.Fprintf(os.Stderr, "Move [%s] -> [%s]\n", from, to)
+	return nil
+}
+
 func (c *Cpio) Ls(path string, recursive bool) {
 	path = norm_path(path)
 	if path != "" {
@@ -647,6 +661,62 @@ func (entry CpioEntry) Format(f fmt.State, verb rune) {
 	))
 }
 
+func _xz(data, compressed *[]byte) bool {
+	bufferc := bytes.NewBuffer(*compressed)
+	xzwriter, err := xz.NewWriter(bufferc)
+	if err != nil {
+		log.Println("Error:", err)
+		return false
+	}
+	_, err = xzwriter.Write(*data)
+	if err != nil {
+		log.Println("Error:", err)
+		return false
+	}
+	return true
+}
+
+func (entry *CpioEntry) Compress() bool {
+	if entry.Mode&S_IFMT != S_IFREG {
+		return false
+	}
+	compressed := make([]byte, 0)
+	if !_xz(&entry.Data, &compressed) {
+		fmt.Fprintln(os.Stderr, "xz compression failed")
+		return false
+	}
+	entry.Data = compressed
+	return true
+}
+
+func _unxz(data, decompressed *[]byte) bool {
+	buffer := bytes.NewBuffer(*data)
+	xzreader, err := xz.NewReader(buffer)
+	if err != nil {
+		log.Println("Error:", err)
+		return false
+	}
+	_, err = xzreader.Read(*decompressed)
+	if err != nil {
+		log.Println("Error:", err)
+		return false
+	}
+	return true
+}
+
+func (entry *CpioEntry) Decompress() bool {
+	if entry.Mode&S_IFMT != S_IFREG {
+		return false
+	}
+	decompressed := make([]byte, 0)
+	if !_unxz(&entry.Data, &decompressed) {
+		fmt.Fprintln(os.Stderr, "xz decompression failed")
+		return false
+	}
+	entry.Data = decompressed
+	return true
+}
+
 const MAGISK_PATCHED int32 = 1 << 0
 const UNSUPPORTED_CPIO int32 = 1 << 1
 
@@ -704,8 +774,299 @@ func (c *Cpio) Test() int32 {
 }
 
 func (c *Cpio) Restore() error {
-	//backups := make(map[string]CpioEntry, 0)
-	//backups_key := make([]string, 0)
-	//rm_list := ""
+	backups := make(map[string]CpioEntry, 0)
+	var rm_list strings.Builder
+
+	for _, name := range c.Keys {
+		entry := c.Entries[name]
+		if strings.HasPrefix(name, ".backup/") {
+			if name == ".backup/.rmlist" {
+				//rm_list = c.Entries[name].Data
+				_, err := rm_list.Write(c.Entries[name].Data)
+				if err != nil {
+					return err
+				}
+			} else if name != ".backup/.magisk" {
+				new_name := func() string {
+					if strings.HasSuffix(name, ".xz") && entry.Decompress() {
+						return name[8 : len(name)-3]
+					} else {
+						return name[8:]
+					}
+				}()
+				backups[new_name] = entry
+			}
+		}
+	}
+	c.Rm(".backup", false)
+	if rm_list.Len() == 0 && len(backups) == 0 {
+		for k := range c.Entries {
+			delete(c.Entries, k)
+		}
+		return nil
+	}
+
+	for _, rm := range strings.Split(rm_list.String(), "\x00") {
+		if len(rm) != 0 {
+			c.Rm(rm, false)
+		}
+	}
+	for k, v := range backups {
+		c.Keys = append(c.Keys, k)
+		c.Entries[k] = v
+	}
+	slices.Sort(c.Keys)
 	return nil
+}
+
+func (c *Cpio) Backup(origin string, skip_compress bool) error {
+	backups := make(map[string]CpioEntry)
+	var rm_list strings.Builder
+
+	backups[".backup"] = CpioEntry{
+		Mode:      S_IFDIR,
+		Uid:       0,
+		Gid:       0,
+		RDevMajor: 0,
+		RDevMinor: 0,
+		Data:      []byte{},
+	}
+	o := NewCpio()
+	o.LoadFromFile(origin)
+	o.Close()
+
+	o.Rm(".backup", true)
+	c.Rm(".backup", true)
+
+	lhs := o.Entries
+	rhs := c.Entries
+	lhsKeys := o.Keys // 建议使用驼峰命名
+	rhsKeys := c.Keys
+
+	lhsIndex, rhsIndex := 0, 0
+
+	backupFunc := func(name string, entry CpioEntry) {
+		backupPath := ".backup/" + name
+		if !skip_compress && entry.Compress() {
+			backupPath += ".xz"
+		}
+		fmt.Fprintf(os.Stderr, "Backup [%s] -> [%s]\n", name, backupPath)
+		// 需要实际将entry添加到backups map中
+		backups[name] = entry
+	}
+
+	recordFunc := func(name string) {
+		fmt.Fprintf(os.Stderr, "Record new entry [%s] -> [.backup/.rmlist]\n", name)
+		rm_list.WriteString(name)
+		rm_list.WriteByte('\x00')
+	}
+
+	for lhsIndex < len(lhsKeys) && rhsIndex < len(rhsKeys) {
+		lKey := lhsKeys[lhsIndex]
+		rKey := rhsKeys[rhsIndex]
+		re := rhs[rKey] // 先获取当前右侧条目
+
+		switch cmp.Compare(lKey, rKey) {
+		case -1: // lhs < rhs
+			le := lhs[lKey]
+			backupFunc(lKey, le)
+			lhsIndex++
+		case 0: // lhs == rhs
+			le := lhs[lKey]
+			if !bytes.Equal(re.Data, le.Data) {
+				backupFunc(lKey, le)
+			}
+			lhsIndex++
+			rhsIndex++
+		case 1: // lhs > rhs
+			recordFunc(rKey)
+			rhsIndex++
+		}
+	}
+
+	// 处理剩余元素
+	for ; lhsIndex < len(lhsKeys); lhsIndex++ {
+		lKey := lhsKeys[lhsIndex]
+		le := lhs[lKey]
+		backupFunc(lKey, le)
+	}
+
+	for ; rhsIndex < len(rhsKeys); rhsIndex++ {
+		rKey := rhsKeys[rhsIndex]
+		recordFunc(rKey)
+	}
+
+	if rm_list.Len() != 0 {
+		backups[".backup/.rmlist"] = CpioEntry{
+			Mode:      S_IFREG,
+			Uid:       0,
+			Gid:       0,
+			RDevMajor: 0,
+			RDevMinor: 0,
+			Data:      []byte(rm_list.String()),
+		}
+	}
+
+	for k, v := range backups {
+		c.Keys = append(c.Keys, k)
+		c.Entries[k] = v
+	}
+	slices.Sort(c.Keys)
+
+	return nil
+}
+
+func NewCpioCli() *CpioCli {
+	return new(CpioCli)
+}
+
+func (c *CpioCli) FromArgs(args []string) {
+	c.File = args[0]
+	c.Commonds = args[1:]
+}
+
+func parseMode(mode string) uint32 {
+	ret, err := strconv.ParseInt(mode, 8, 32)
+	if err != nil {
+		log.Fatalln("Error:", err)
+	}
+	return uint32(ret)
+}
+
+func CpioCommands(argv []string) {
+	if len(argv) < 1 {
+		log.Fatalln("No arguments")
+	}
+
+	// 初始化
+	cli := NewCpioCli()
+	cli.FromArgs(argv)
+	cpio := NewCpio()
+
+	// 加载现有cpio文件(修正后的逻辑)
+	if _, err := os.Stat(cli.File); err == nil {
+		if err := cpio.LoadFromFile(cli.File); err != nil {
+			log.Fatalf("加载cpio文件失败: %v", err)
+		}
+	}
+
+	errExit := func() {
+		PrintCpioUsage()
+		os.Exit(125)
+	}
+
+	// 打印调试信息
+	log.Printf("将执行 %d 个命令", len(cli.Commonds))
+
+	for _, command := range cli.Commonds {
+		if strings.HasPrefix(command, "#") {
+			continue
+		}
+		cmd := strings.Split(command, " ")
+		fmt.Printf("cmd: %v\n", cmd)
+		switch cmd[0] {
+		case "test":
+			os.Exit(int(cpio.Test()))
+		case "restore":
+			cpio.Restore()
+		case "patch":
+			cpio.Patch()
+		case "exists":
+			if len(cmd) > 1 {
+				if cpio.Exists(cmd[1]) {
+					os.Exit(0)
+				} else {
+					os.Exit(1)
+				}
+			} else {
+				errExit()
+			}
+		case "backup":
+			if len(cmd) > 1 {
+				skip_compress := false
+				if len(cmd) > 2 {
+					if cmd[2] == "-n" {
+						skip_compress = true
+					}
+				}
+				if err := cpio.Backup(cmd[1], skip_compress); err != nil {
+					log.Fatalln(err)
+				}
+			} else {
+				errExit()
+			}
+		case "rm":
+			if len(cmd) > 1 {
+				recursive := false
+				path := cmd[1]
+				if cmd[1] == "-r" {
+					recursive = true
+					path = cmd[2]
+				}
+				cpio.Rm(path, recursive)
+			}
+		case "mv":
+			if len(cmd) > 2 {
+				from := cmd[1]
+				to := cmd[2]
+				cpio.Mv(from, to)
+			} else {
+				errExit()
+			}
+		case "ln":
+			if len(cmd) > 2 {
+				src, dst := cmd[1], cmd[2]
+				cpio.Ln(src, dst)
+			} else {
+				errExit()
+			}
+		case "mkdir":
+			if len(cmd) > 2 {
+				mode, dir := parseMode(cmd[1]), cmd[2]
+				cpio.Mkdir(mode, dir)
+			} else {
+				errExit()
+			}
+		case "add":
+			if len(cmd) > 3 {
+				mode, path, file := parseMode(cmd[1]), cmd[2], cmd[3]
+				if err := cpio.Add(mode, path, file); err != nil {
+					log.Fatalln(err)
+				}
+			} else {
+				errExit()
+			}
+		case "extract":
+			if len(cmd) > 1 {
+				var path, out *string = &cmd[1], nil
+				if len(cmd) > 2 {
+					out = &cmd[2]
+				}
+				if err := cpio.Extract(path, out); err != nil {
+					log.Fatalln(err)
+				}
+			}
+		case "ls":
+			if len(cmd) == 1 {
+				cpio.Ls("/", true)
+			} else if len(cmd) == 2 {
+				path := cmd[1]
+				cpio.Ls(path, false)
+			} else if len(cmd) > 2 {
+				recursive := false
+				path := cmd[2]
+				if cmd[1] == "-r" {
+					recursive = true
+				}
+				cpio.Ls(path, recursive)
+			} else {
+				errExit()
+			}
+			os.Exit(0)
+		}
+	}
+	err := cpio.Dump(cli.File)
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
