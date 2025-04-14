@@ -20,7 +20,6 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/edsrzf/mmap-go"
-	"github.com/ulikunitz/xz"
 )
 
 // Define this to avoid missing in different platform
@@ -660,46 +659,16 @@ func (entry CpioEntry) Format(f fmt.State, verb rune) {
 	))
 }
 
-func _xz(data, compressed *[]byte) bool {
-	bufferc := bytes.NewBuffer(*compressed)
-	xzwriter, err := xz.NewWriter(bufferc)
-	if err != nil {
-		log.Println("Error:", err)
-		return false
-	}
-	_, err = xzwriter.Write(*data)
-	if err != nil {
-		log.Println("Error:", err)
-		return false
-	}
-	return true
-}
-
 func (entry *CpioEntry) Compress() bool {
 	if entry.Mode&S_IFMT != S_IFREG {
 		return false
 	}
 	compressed := make([]byte, 0)
-	if !_xz(&entry.Data, &compressed) {
+	if !Xz(entry.Data, &compressed) {
 		fmt.Fprintln(os.Stderr, "xz compression failed")
 		return false
 	}
 	entry.Data = compressed
-	return true
-}
-
-func _unxz(data, decompressed *[]byte) bool {
-	buffer := bytes.NewBuffer(*data)
-	xzreader, err := xz.NewReader(buffer)
-	if err != nil {
-		log.Println("Error:", err)
-		return false
-	}
-	_, err = xzreader.Read(*decompressed)
-	if err != nil {
-		log.Println("Error:", err)
-		return false
-	}
 	return true
 }
 
@@ -708,7 +677,7 @@ func (entry *CpioEntry) Decompress() bool {
 		return false
 	}
 	decompressed := make([]byte, 0)
-	if !_unxz(&entry.Data, &decompressed) {
+	if !Unxz(entry.Data, &decompressed) {
 		fmt.Fprintln(os.Stderr, "xz decompression failed")
 		return false
 	}
