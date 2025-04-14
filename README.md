@@ -16,7 +16,7 @@ This is magiskboot reimpl by golang
 |Hexpatch | ✅    |
 |Cpio     | ✅    |
 |Dtb      | ❎    |
-|Extract  | ❎    |
+|Extract  | ✅    |
 # Build
 ## go
 ```bash
