@@ -221,7 +221,29 @@ func Main(args []string) {
 	} else if len(args) > 2 && action == "dtb" {
 		panic(notImplError)
 	} else if len(args) > 2 && action == "extract" {
-		panic(notImplError)
+		os.Exit(func() int {
+			if ExtractBootFromPayload(
+				args[2],
+				func() string {
+					if len(args) > 3 {
+						return args[3]
+					} else {
+						return ""
+					}
+				}(),
+				func() string {
+					if len(args) > 4 {
+						return args[4]
+					} else {
+						return ""
+					}
+				}(),
+			) {
+				return 0
+			} else {
+				return 1
+			}
+		}())
 	} else {
 		Usage()
 	}
