@@ -8,4 +8,7 @@ require (
 	golang.org/x/sys v0.32.0
 )
 
-require github.com/ulikunitz/xz v0.5.12
+require (
+	github.com/ulikunitz/xz v0.5.12
+	google.golang.org/protobuf v1.36.6
+)
