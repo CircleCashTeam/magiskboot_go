@@ -141,8 +141,7 @@ func Fmt2Name(fmt format_t) string {
 
 func Fmt2Ext(fmt format_t) string {
 	switch fmt {
-	case GZIP:
-	case ZOPFLI:
+	case GZIP, ZOPFLI:
 		return ".gz"
 	case LZOP:
 		return ".lzo"
@@ -152,14 +151,13 @@ func Fmt2Ext(fmt format_t) string {
 		return ".lzma"
 	case BZIP2:
 		return ".bz2"
-	case LZ4:
-	case LZ4_LEGACY:
-	case LZ4_LG:
+	case LZ4,
+		LZ4_LEGACY,
+		LZ4_LG:
 		return ".lz4"
 	default:
 		return ""
 	}
-	return ""
 }
 
 func Name2Fmt(name string) format_t {

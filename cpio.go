@@ -56,62 +56,6 @@ type CpioCli struct {
 	Commonds []string
 }
 
-type CpioAction int
-
-const (
-	TEST CpioAction = iota
-	RESTORE
-	PATCH
-	EXIST
-	BACKUP
-	REMOVE
-	MOVE
-	EXTRACT
-	LINK
-	ADD
-	LIST
-)
-
-type CpioCommand struct {
-	Action CpioAction
-}
-
-type Test struct {
-}
-
-type Restore struct{}
-
-type Patch struct{}
-
-type Exists struct {
-	Path string
-}
-
-type Backup struct {
-	Origin         string
-	SkipDecompress bool
-}
-
-type Remove struct {
-	Path      string
-	Recursive bool
-}
-
-type Move struct {
-	Paths []string
-}
-
-type MakeDir struct {
-	Mode uint32
-	Path string
-	File string
-}
-
-type List struct {
-	Path      string
-	Recursive bool
-}
-
 func PrintCpioUsage() {
 	fmt.Fprint(os.Stderr, `Usage: magiskboot cpio <incpio> [commands...]
 

@@ -2,7 +2,6 @@ package magiskboot
 
 import (
 	"bytes"
-	"compress/bzip2"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -175,29 +174,11 @@ func doExtractBootFromPayload(
 				out_file.Seek(int64(out_seek), io.SeekStart)
 				out_file.Write(make([]byte, num_blocks))
 			}
-		case update_engine.InstallOperation_REPLACE_BZ:
+		case update_engine.InstallOperation_REPLACE_BZ,
+			update_engine.InstallOperation_REPLACE_XZ:
 			out_file.Seek(int64(out_offset), io.SeekStart)
-			//panic(errors.New("Decompress not impl yet")) // TODO: impl decompress
-			_buf := bytes.NewBuffer(buf)
-			reader := bzip2.NewReader(_buf)
-			d, err := io.ReadAll(reader)
-			if err != nil {
-				log.Fatalln(err)
-			}
-			_, err = out_file.Write(d)
-			if err != nil {
-				log.Fatalln(err)
-			}
-		case update_engine.InstallOperation_REPLACE_XZ:
-			out_file.Seek(int64(out_offset), io.SeekStart)
-			//panic(errors.New("Decompress not impl yet")) // TODO: impl decompress
-			_buf := make([]byte, 0)
-			if !Unxz(buf, &_buf) {
-				log.Fatalln("Could not extract xz data")
-			}
-			_, err := out_file.Write(_buf)
-			if err != nil {
-				log.Fatalln(err)
+			if !DecompressToFd(buf, out_file) {
+				return badPayload("decompression failed")
 			}
 		default:
 			fmt.Fprintln(os.Stderr, "DATA_TYPE: ", data_type)

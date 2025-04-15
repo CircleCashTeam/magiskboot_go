@@ -204,7 +204,12 @@ func Main(args []string) {
 		}
 		panic(notImplError)
 	} else if len(args) > 2 && action == "decompress" {
-		panic(notImplError)
+		Decompress(args[2], func() string {
+			if len(args) > 3 {
+				return args[3]
+			}
+			return ""
+		}())
 	} else if len(args) > 2 && action == "compress" {
 		panic(notImplError)
 	} else if len(args) > 4 && action == "hexpatch" {
