@@ -11,7 +11,7 @@ This is magiskboot reimpl by golang
 |Repack   | ❎    |
 |Verify   | ❎    |
 |Sign     | ❎    |
-|Decompress| ❎    |
+|Decompress| ✅    |
 |Compress | ❎    |
 |Hexpatch | ✅    |
 |Cpio     | ✅    |
