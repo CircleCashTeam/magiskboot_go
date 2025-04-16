@@ -46,9 +46,9 @@ func NewLz4HCWriter(writer io.Writer, lg bool) *Lz4HCWriter {
 	z.writer = writer
 	z.lg = lg
 	z.buf = make([]byte, LZ4_COMPRESSED)
-	if lg {
-		writer.Write([]byte{0x02, 0x21, 0x4c, 0x18})
-	}
+
+	writer.Write([]byte{0x02, 0x21, 0x4c, 0x18})
+
 	return z
 }
 
