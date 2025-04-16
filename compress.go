@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pierrec/lz4"
+	"github.com/pierrec/lz4/v4"
 	"github.com/ulikunitz/xz"
 	"github.com/ulikunitz/xz/lzma"
 )
@@ -56,7 +56,7 @@ func NewDecoder(t format_t, reader io.Reader) *Decoder {
 	case LZ4:
 		r = lz4.NewReader(reader)
 	case LZ4_LEGACY, LZ4_LG:
-		r = lz4.NewReaderLegacy(reader)
+		r = lz4.NewReader(reader)
 	case ZOPFLI, GZIP:
 		r, err = gzip.NewReader(reader)
 		if err == nil {
@@ -75,6 +75,10 @@ func (d *Decoder) Decode() ([]byte, error) {
 		return nil, errors.New("decoder not initialized")
 	}
 	return io.ReadAll(d.reader)
+}
+
+func (d *Decoder) Read(data []byte) (int, error) {
+	return d.reader.Read(data)
 }
 
 func (d *Decoder) Close() error {
@@ -140,15 +144,37 @@ func Decompress(infile, outfile string) {
 	}()
 
 	decoder := NewDecoder(t, in_fd)
+	defer decoder.Close()
+	/*
+		decompressed, err := decoder.Decode()
+		if err != nil {
+			log.Fatalln("Decompression error\n", err)
+		}
 
-	decompressed, err := decoder.Decode()
-	if err != nil {
-		log.Fatalln("Decompression error\n", err)
-	}
+		_, err = out_fd.Write(decompressed)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	*/
+	//buf = make([]byte, 4096)
+	for {
+		// 读取数据
+		_len, err := decoder.Read(buf)
+		if _len > 0 {
+			// 写入读取到的数据
+			_, writeErr := out_fd.Write(buf[:_len])
+			if writeErr != nil {
+				log.Fatalln("Write error:", writeErr)
+			}
+		}
 
-	_, err = out_fd.Write(decompressed)
-	if err != nil {
-		log.Fatalln(err)
+		// 处理错误
+		if err != nil {
+			if err == io.EOF {
+				break // 正常结束
+			}
+			log.Fatalln("Read error:", err)
+		}
 	}
 
 	if in_fd != os.Stdin {

@@ -12,3 +12,8 @@ require (
 	github.com/ulikunitz/xz v0.5.12
 	google.golang.org/protobuf v1.36.6
 )
+
+require (
+	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/pierrec/lz4/v4 v4.1.22
+)
