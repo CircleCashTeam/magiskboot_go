@@ -212,7 +212,7 @@ func Main(args []string) {
 		}())
 	} else if len(args) > 2 && strings.HasPrefix(action, "compress") {
 		Compress(func() string {
-			if action[8] == '=' {
+			if len(action) > 8 && action[8] == '=' {
 				return action[9:]
 			}
 			return "gzip"
