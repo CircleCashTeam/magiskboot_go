@@ -12,7 +12,7 @@ This is magiskboot reimpl by golang
 |Verify   | ❎    |
 |Sign     | ❎    |
 |Decompress| ✅    |
-|Compress | ❎    |
+|Compress | ✅    |
 |Hexpatch | ✅    |
 |Cpio     | ✅    |
 |Dtb      | ❎    |

@@ -210,8 +210,21 @@ func Main(args []string) {
 			}
 			return ""
 		}())
-	} else if len(args) > 2 && action == "compress" {
-		panic(notImplError)
+	} else if len(args) > 2 && strings.HasPrefix(action, "compress") {
+		Compress(func() string {
+			if action[8] == '=' {
+				return action[9:]
+			}
+			return "gzip"
+		}(),
+			args[2],
+			func() string {
+				if len(args) > 3 {
+					return args[3]
+				}
+				return ""
+			}(),
+		)
 	} else if len(args) > 4 && action == "hexpatch" {
 		os.Exit(func() int {
 			if HexPatch(args[2], args[3], args[4]) {

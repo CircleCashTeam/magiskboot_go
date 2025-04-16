@@ -14,6 +14,11 @@ require (
 )
 
 require (
+	github.com/dsnet/compress v0.0.1 // indirect
+	github.com/foobaz/go-zopfli v0.0.0-20140122214029-7432051485e2 // indirect
+)
+
+require (
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22
 )
