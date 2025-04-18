@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"magiskboot/update_engine"
+
 	"os"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
+	update_engine "magiskboot/chromeos_update_engine"
 )
 
 func badPayload(msg string) error {
@@ -75,7 +75,7 @@ func doExtractBootFromPayload(
 		log.Fatalln(err)
 	}
 	manifest := new(update_engine.DeltaArchiveManifest)
-	if err := proto.Unmarshal(buf, manifest); err != nil {
+	if err := manifest.Unmarshal(buf); err != nil {
 		log.Fatalln(err)
 	}
 	if manifest.GetMinorVersion() != 0 {
@@ -161,21 +161,21 @@ func doExtractBootFromPayload(
 
 		out_offset := operation.GetDstExtents()[0].GetStartBlock() * uint64(block_size)
 		switch data_type {
-		case update_engine.InstallOperation_REPLACE:
+		case update_engine.REPLACE:
 			out_file.Seek(int64(out_offset), io.SeekStart)
 			_, err := out_file.Write(buf)
 			if err != nil {
 				log.Fatalln(err)
 			}
-		case update_engine.InstallOperation_ZERO:
+		case update_engine.ZERO:
 			for _, ext := range operation.GetDstExtents() {
 				out_seek := ext.GetStartBlock() * uint64(block_size)
 				num_blocks := ext.GetNumBlocks()
 				out_file.Seek(int64(out_seek), io.SeekStart)
 				out_file.Write(make([]byte, num_blocks))
 			}
-		case update_engine.InstallOperation_REPLACE_BZ,
-			update_engine.InstallOperation_REPLACE_XZ:
+		case update_engine.REPLACE_BZ,
+			update_engine.REPLACE_XZ:
 			out_file.Seek(int64(out_offset), io.SeekStart)
 			if !DecompressToFd(buf, out_file) {
 				return badPayload("decompression failed")
