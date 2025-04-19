@@ -6,7 +6,7 @@ This is magiskboot reimpl by golang
 |---------|--------|
 |Cleanup  | ✅    |
 |Sha1     | ✅    |
-|Split    | ❎    |
+|Split    | ✅    |
 |Unpack   | ❎    |
 |Repack   | ❎    |
 |Verify   | ❎    |
