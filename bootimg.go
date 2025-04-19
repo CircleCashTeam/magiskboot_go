@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"io"
 	"log"
+	"os"
 	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
@@ -614,6 +617,16 @@ func (d *DynImgHdrVendor) IsVendor() bool {
 
 type DynImgVndV3 struct {
 	DynImgHdrVendor
+
+	RamdiskSize *uint32
+	Cmdline     *[2048]byte
+	Name        *[16]byte
+	HeaderSize  *uint32
+	DtbSize     *uint32
+
+	Raw BootImgHdrVndV3
+
+	ExtraCmdline *[1536 - BOOT_ARGS_SIZE]byte
 }
 
 func (d *DynImgVndV3) HeaderVersion() uint32 {
@@ -624,38 +637,37 @@ func (d *DynImgVndV3) PageSize() uint32 {
 	return d.V4Vnd.PageSize
 }
 
-func (d *DynImgVndV3) RamdiskSize() uint32 {
-	return d.V4Vnd.RamdiskSize
-}
-
-func (d *DynImgVndV3) Cmdline() []byte {
-	return d.V4Vnd.Cmdline[:]
-}
-
-func (d *DynImgVndV3) Name() []byte {
-	return d.V4Vnd.Name[:]
-}
-
-func (d *DynImgVndV3) HeaderSize() uint32 {
-	return d.V4Vnd.HeaderSize
-}
-
-func (d *DynImgVndV3) DtbSize() uint32 {
-	return d.V4Vnd.DtbSize
-}
-
 func (d *DynImgVndV3) HdrSpace() uint64 {
 	return align_to(d.HdrSize(), uint64(d.PageSize()))
 }
 
-func (d *DynImgVndV3) ExtraCmdline() []byte {
-	return d.V4Vnd.Cmdline[:BOOT_ARGS_SIZE]
+func (d *DynImgVndV3) Init(data []byte) {
+	if len(data) < binary.Size(d.Raw) {
+		log.Fatalln("Error: Could not parse data size less than struct")
+	}
+
+	buf := bytes.NewReader(data)
+	err := binary.Read(buf, binary.LittleEndian, &d.Raw)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	d.RamdiskSize = &d.Raw.RamdiskSize
+	d.Cmdline = &d.Raw.Cmdline
+	d.Name = &d.Raw.Name
+	d.HeaderSize = &d.Raw.HeaderSize
+	d.DtbSize = &d.Raw.DtbSize
+
+	// copy data
+	d.V4Vnd.BootImgHdrVndV3 = d.Raw
 }
 
 type DynImgVndV4 struct {
 	DynImgVndV3
 
-	BootconfigSize uint32
+	Raw BootImgHdrVndV4
+
+	BootconfigSize *uint32
 }
 
 func (d *DynImgVndV4) VendorRamdiskTableSize() uint32 {
@@ -670,12 +682,26 @@ func (d *DynImgVndV4) VendorRamdiskTableEntrySize() uint32 {
 	return d.V4Vnd.VendorRamdiskTableEntrySize
 }
 
-func (d *DynImgVndV4) Refresh() {
-	d.V4Vnd.BootconfigSize = d.BootconfigSize
+func (d *DynImgVndV4) Init(data []byte) {
+	if len(data) < binary.Size(d.Raw) {
+		log.Fatalln("Error: Could not parse data size less than struct")
+	}
+
+	buf := bytes.NewReader(data)
+	err := binary.Read(buf, binary.LittleEndian, &d.Raw)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	d.DynImgVndV3.Init(data)
+
+	d.BootconfigSize = &d.Raw.BootconfigSize
+	// copy data
+	d.V4Vnd = d.Raw
 }
 
 const (
-	MTK_KERNEL int = iota
+	MTK_KERNEL bootFlag = iota
 	MTK_RAMDISK
 	CHROMEOS_FLAG
 	DHTB_FLAG
@@ -758,4 +784,131 @@ func (b *BootImg) GetTail() []byte {
 
 func (b *BootImg) Verify(cert string) bool {
 	return false // not impl
+}
+
+func decompress(t format_t, fd *os.File, in mmap.MMap) {
+	decoder := NewDecoder(t, bytes.NewReader(in))
+	io.Copy(fd, decoder)
+}
+
+func dump(buf []byte, size int, filename string) {
+	if size == 0 {
+		return
+	}
+	fd, err := os.Create(filename)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer fd.Close()
+	io.CopyN(fd, bytes.NewReader(buf), int64(size))
+}
+
+type fdtHeader struct {
+	Magis           uint32
+	TotalSize       uint32
+	OffDtStruct     uint32
+	OffDtStrings    uint32
+	OffMemRsvmap    uint32
+	Version         uint32
+	LastCompVersion uint32
+	BootCpuidPhys   uint32
+	SizeDtStrings   uint32
+	SizeDtStruct    uint32
+}
+
+//type nodeHeader struct {
+//	Tag  uint32
+//	Name []byte
+//}
+
+func findDtbOffset(fmap mmap.MMap, sz uint32) int {
+	fmap_idx := 0
+	end := fmap_idx + int(sz)
+
+	for curr := fmap_idx; curr < fmap_idx+int(sz); curr += 40 {
+		curr = bytes.Index(fmap, []byte{0xd0, 0x0d, 0xfe, 0xed})
+		if curr == -1 {
+			return -1
+		}
+		fdt_hdr := fdtHeader{}
+		binary.Read(bytes.NewReader(fmap[curr:]), binary.BigEndian, &fdt_hdr)
+
+		totalsize := fdt_hdr.TotalSize
+		if totalsize > uint32(end-curr) {
+			continue
+		}
+
+		off_dt_struct := fdt_hdr.OffDtStruct
+		if off_dt_struct > uint32(end-curr) {
+			continue
+		}
+
+		var fdt_node_hdr_tag uint32
+		binary.Read(bytes.NewReader(fmap[curr+int(off_dt_struct):]), binary.BigEndian, &fdt_node_hdr_tag)
+		if fdt_node_hdr_tag != 0x1 {
+			continue
+		}
+		return curr - fmap_idx
+	}
+	return -1
+}
+
+func checkFmtLg(fmap mmap.MMap, sz uint32) format_t {
+	f := CheckFmt(fmap)
+
+	reader := bytes.NewReader(fmap)
+
+	if f == LZ4_LEGACY {
+		var off int64 = 4 // seems skip lz4_legacy header bytes
+		var block_sz uint32
+		for {
+			if off+4 < int64(sz) {
+				reader.Seek(int64(off), io.SeekStart)
+				binary.Read(reader, binary.LittleEndian, &block_sz)
+				off += 4
+				if off+int64(block_sz) > int64(sz) {
+					return LZ4_LG
+				}
+				off += int64(block_sz)
+			}
+		}
+	}
+	return f
+}
+
+func SplitImageDtb(filename string, skip_decomp bool) int {
+	file, err := os.OpenFile(filename, os.O_RDONLY, 0644)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmap, err := mmap.Map(file, 0, mmap.RDONLY)
+	if err != nil {
+		file.Close()
+		log.Fatalln(err)
+	}
+	defer fmap.Unmap()
+	defer file.Close()
+
+	st, _ := os.Stat(filename)
+	img_sz := uint32(st.Size()) // i have not seen big file kernel + dtb
+	if off := findDtbOffset(fmap, img_sz); off > 0 {
+		f := checkFmtLg(fmap, uint32(img_sz))
+		if !skip_decomp && COMPRESSED(f) {
+			fd, err := os.Create(KERNEL_FILE)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			decompress(f, fd, fmap[off:])
+			fd.Close()
+		} else {
+			dump(fmap, off, KERNEL_FILE)
+		}
+		dump(fmap[off:], int(img_sz)-off, KER_DTB_FILE)
+	} else {
+		fmt.Fprintln(os.Stderr, "Cannot find DTB in", filename)
+		return 1
+	}
+
+	return 0
+
 }

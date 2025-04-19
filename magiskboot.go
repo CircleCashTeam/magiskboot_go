@@ -188,9 +188,9 @@ func Main(args []string) {
 			if len(args) == 3 {
 				Usage()
 			}
-			panic(notImplError)
+			os.Exit(SplitImageDtb(args[3], true))
 		} else {
-			panic(notImplError)
+			os.Exit(SplitImageDtb(args[2], false))
 		}
 	} else if len(args) > 2 && action == "unpack" {
 		panic(notImplError)
